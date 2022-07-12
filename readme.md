@@ -1,5 +1,5 @@
 An implemention of Graphormer [Do Transformers Really Perform Bad for Graph Representation?].
-This make it be easy for using it as part of your own model.
+This makes it be easy for using it as part of your own model.
 
 
 ref:
