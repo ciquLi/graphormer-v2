@@ -1,0 +1,61 @@
+{
+  "gpu": {
+    "use": true,
+    "id": 0
+  },
+
+  "model": "Graphormer",
+  "dataset": "cora",
+
+  "out_dir": "out/",
+
+  "params": {
+    "seed": 41,
+    "epochs": 100,
+    "batch_size": 32,
+    "init_lr": 0.05,
+    "lr_reduce_factor": 0.5,
+    "lr_schedule_patience": 10,
+    "min_lr": 1e-10,
+    "weight_decay": 0.0,
+    "print_epoch_interval": 5,
+    "max_time": 24
+  },
+
+  "net_params": {
+    "dropout": 0.1,
+    "attention_dropout": 0.1,
+    "act_dropout": 0.0,
+    "encoder_ffn_embed_dim": 256,
+    "encoder_layers": 6,
+    "encoder_attention_heads": 8,
+    "encoder_embed_dim": 128,
+    "share_encoder_input_output_embed": false,
+    "no_token_positional_embeddings": false,
+    "apply_graphormer_init": false,
+    "activation_fn": "gelu",
+    "encoder_normalize_before": true,
+    "pre_layernorm": false,
+    "remove_head": false
+
+  },
+  "data_params":{
+    "dataset_name": "",
+    "num_classes": 1,
+    "max_nodes": 128,
+    "dataset_source": "none",
+    "num_atoms": -1,
+    "num_edges": -1,
+    "num_in_degree": -1,
+    "num_out_degree": -1,
+    "num_spatial": 512,
+    "num_edge_dis": 128,
+    "multi_hop_max_dist": 5,
+    "spatial_pos_max": 1024,
+    "edge_type": "",
+    "pretrained_model_name": "none",
+    "load_pretrained_model_output_layer": false,
+    "train_epoch_shuffle": false,
+    "user_data_dir": ""
+  }
+}

@@ -1,0 +1,32 @@
+method: grid # 寻找参数的方法
+metric: # 衡量目标
+  goal: maximize
+  name: test_acc
+parameters: # 参数项，即需要调参的参数集合
+  config:
+    values: ["../configs/photo_Graphormer.json",
+             "../configs/physics_Graphormer.json"]
+  init_lr:
+    values: [0.02, 0.01, 0.005, 0.002, 0.001, 0.0005]
+  lr_schedule_patience:
+    values: [10, 15, 20, 25, 30, 35, 40, 50, 100]
+  min_lr:
+    values: [1e-6, 1e-7, 1e-8]
+  weight_decay:
+    values: [ 0.0001]
+  L:
+    values: [1, 2, 3, 4,]
+#  n_heads:
+#    values: [8]
+  dropout:
+    values: [0.1, 0.3]
+#  hidden_dim:
+#    values: [128]
+#  out_dim:
+#    values: [128]
+#  readout:
+#    values: ["mean"]
+program: main_dgl_dataset_node_classification.py
+
+
+
