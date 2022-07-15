@@ -16,7 +16,7 @@ from prefetch_generator import BackgroundGenerator
 from torch.utils import data
 
 
-def LoadData(DATASET_NAME, graph_file_num):
+def LoadData(DATASET_NAME, graph_file_num, data_params):
     """
         This function is called in the main_xx.py file 
         returns:
@@ -26,7 +26,7 @@ def LoadData(DATASET_NAME, graph_file_num):
     if DATASET_NAME == 'ogbn-arxiv':
         return ""
     else:
-        return myDataset(DATASET_NAME, graph_file_num)
+        return myDataset(DATASET_NAME, graph_file_num, data_params)
     
 class DataLoaderX(DataLoader):
 
@@ -84,12 +84,13 @@ def create_graph(dataset_list):
 
 
 class myDataset(data.Dataset):
-    def __init__(self, dataset_name, graph_file_num=1):
+    def __init__(self, dataset_name, graph_file_num, data_params):
         """
         Loading planetoid datasets
         """
         self.graph_file_num = graph_file_num
         self.dataset_name = dataset_name
+        self.data_params = data_params
         self.get_data_params(0)
         
     def __getitem__(self, index):
@@ -106,9 +107,9 @@ class myDataset(data.Dataset):
                                  str(index) + "/"
 
         graph, feat, labels, train_mask, valid_mask, test_mask, _ = create_graph(dataset_list)
-        attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type = self.preprocess_item(graph)
+        attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type, edge_input = self.preprocess_item(graph)
         
-        return feat, labels, train_mask, valid_mask, test_mask, attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type
+        return feat, labels, train_mask, valid_mask, test_mask, attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type, edge_input
 
     def __len__(self):
         return self.graph_file_num
@@ -134,9 +135,11 @@ class myDataset(data.Dataset):
 
         prepro_start = time.time()
         print("[II] Preprocessing spatial SPD and node centrality...")
-        attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type = self.preprocess_item(graph)
+        attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type, edge_input = self.preprocess_item(graph)
         print("[II] Finished preprocessing.")
         print("[II] Preprocessing time: {:.4f}s".format(time.time() - prepro_start))
+        
+        _, edge_index, _ = graph.edge_attr, graph.edge_index, graph.x
         
         self.num_atoms = feat.size(0)
         self.feat_dim = feat.size(1)
@@ -144,6 +147,8 @@ class myDataset(data.Dataset):
         self.num_in_degree = torch.max(in_degree) + 1
         self.num_out_degree = torch.max(out_degree) + 1
         self.num_classes = num_classes
+        self.num_edges = edge_index.size(1)
+        self.multi_hop_max_dist = edge_input.size(-2)
   
     def preprocess_item(self, graph):
         # paths
@@ -152,7 +157,7 @@ class myDataset(data.Dataset):
         in_degree_path = self.saved_tensor_path + "in_degree.pt"
         out_degree_path = self.saved_tensor_path + "out_degree.pt"
         attn_edge_type_path = self.saved_tensor_path + "attn_edge_type.pt"
-        # edge_input_path = self.saved_tensor_path + "edge_input_path.pt"
+        edge_input_path = self.saved_tensor_path + "edge_input_path.pt"
         # print(os.path.getsize(self.saved_tensor_path))
 
         if os.path.exists(self.saved_tensor_path) and os.path.getsize(self.saved_tensor_path):
@@ -162,14 +167,13 @@ class myDataset(data.Dataset):
             in_degree = torch.load(in_degree_path)
             out_degree = torch.load(out_degree_path)
             attn_edge_type = torch.load(attn_edge_type_path)
-            # edge_input = torch.load(edge_input_path)
-            return attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type
+            edge_input = torch.load(edge_input_path)
+            return attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type, attn_edge_type
         else:
             if not os.path.exists(self.saved_tensor_path):
                 os.makedirs(self.saved_tensor_path)
 
             edge_attr, edge_index, x = graph.edge_attr, graph.edge_index, graph.x
-            
             if edge_attr is None:
                 edge_attr = torch.zeros((edge_index.shape[1]), dtype=torch.long)
         
@@ -189,14 +193,15 @@ class myDataset(data.Dataset):
             )
 
             shortest_path_result, path = algos.floyd_warshall(adj.numpy())
-            # max_dist = np.amax(shortest_path_result)
+            max_dist = np.amax(shortest_path_result)
+            edge_input = torch.randn((1,1,max_dist,attn_edge_type.size(-1))).long()
             # edge_input = algos.gen_edge_input(max_dist, path, attn_edge_type.numpy())
+            # edge_input = torch.from_numpy(edge_input).long()
             spatial_pos = torch.from_numpy((shortest_path_result)).long()
             print("spatial_pos size: ", spatial_pos.size())
-            attn_bias = torch.zeros([N+1, N+1], dtype=torch.float)  # without graph token
-
-            attn_bias = attn_bias
-            spatial_pos = spatial_pos
+            attn_bias = torch.zeros([N+1, N+1], dtype=torch.float)  # with graph token
+            attn_bias[1:, 1:][spatial_pos >= self.data_params['spatial_pos_max']] = float("-inf")
+            
             in_degree = adj.long().sum(dim=1).view(-1)
             out_degree = adj.long().sum(dim=0).view(-1)
 
@@ -206,8 +211,8 @@ class myDataset(data.Dataset):
             torch.save(in_degree, in_degree_path)
             torch.save(out_degree, out_degree_path)
             torch.save(attn_edge_type, attn_edge_type_path)
-            # torch.save(edge_input, edge_input_path)
-            return attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type
+            torch.save(edge_input, edge_input_path)
+            return attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type, attn_edge_type
     
     
     

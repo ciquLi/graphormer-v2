@@ -163,7 +163,7 @@ class GraphAttnBias(nn.Module):
             # [n_graph, n_node, n_node, n_head] -> [n_graph, n_head, n_node, n_node]
             edge_input = self.edge_encoder(attn_edge_type).mean(-2).permute(0, 3, 1, 2)
 
-        graph_attn_bias[:, :, 1:, 1:] = graph_attn_bias[:, :, 1:, 1:] + edge_input
+        graph_attn_bias[:, :, 1:, 1:] = graph_attn_bias[:, :, 1:, 1:] # without edge encoding
         graph_attn_bias = graph_attn_bias + attn_bias.unsqueeze(1)  # reset
 
         return graph_attn_bias

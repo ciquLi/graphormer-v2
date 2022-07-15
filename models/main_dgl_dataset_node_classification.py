@@ -83,11 +83,11 @@ def evaluate(model, feat, labels, prepro_bias, train_idx, valid_idx, test_idx, d
     evaluate the perfomance of the model
     """
     model.eval()
-    attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type = prepro_bias
+    attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type,edge_input = prepro_bias
     batched_data = {'x':feat.long(),'attn_bias':attn_bias,
                     'spatial_pos':spatial_pos,'in_degree':in_degree,
                     'out_degree':out_degree,'attn_edge_type':attn_edge_type,
-                    'edge_input':attn_edge_type}
+                    'edge_input':edge_input}
     kwagrs = {'perturb':None,'masked_tokens':None}
     
     pred = model(batched_data, **kwagrs)
@@ -115,11 +115,11 @@ def train_epoch(model, feat, prepro_bias, optimizer, device):
     """"""
     model.train()
     optimizer.zero_grad()
-    attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type = prepro_bias
+    attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type, edge_input = prepro_bias
     batched_data = {'x':feat.long(),'attn_bias':attn_bias,
                     'spatial_pos':spatial_pos,'in_degree':in_degree,
                     'out_degree':out_degree,'attn_edge_type':attn_edge_type,
-                    'edge_input':attn_edge_type}
+                    'edge_input':edge_input}
     kwagrs = {'perturb':None,'masked_tokens':None}
     pred = model(batched_data, **kwagrs)
 
@@ -162,91 +162,92 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, data_params, dir
     dataloader = DataLoaderX(dataset=dataset, shuffle=False)
     # At any point you can hit Ctrl + C to break out of training early.
     try:
-        # with tqdm(range(params['epochs'])) as t:
-        for epoch in range(params['epochs']):
-            # for epoch in t:
-            for batch_data in tqdm(dataloader):
-                # t.set_description('Epoch %d' % epoch)
-                batch_data_cuda = [item.to(device) for item in batch_data]
-                feat, labels, train_mask, valid_mask, test_mask, \
-                attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type = batch_data_cuda
-                start_time = time.time()
-                prepro_bias = (attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type)
-                pred = train_epoch(model, feat, prepro_bias, optimizer, device)
-                pred = pred[:,1:,:]
-                loss = custom_loss_function(pred[train_mask], labels[train_mask])
-                loss.backward()
-                optimizer.step()
+        with tqdm(range(params['epochs'])) as t:
+        # for epoch in range(params['epochs']):
+            for epoch in t:
+                for _,batch_data in enumerate(dataloader):
+                    t.set_description('Epoch %d' % epoch)
+                    batch_data_cuda = [item.to(device) for item in batch_data]
+                    feat, labels, valid_mask, test_mask, train_mask, \
+                    attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type, edge_input = batch_data_cuda
+                    start_time = time.time()
+                    prepro_bias = (attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type, edge_input)
+                    train_sum = torch.sum(train_mask)
+                    pred = train_epoch(model, feat, prepro_bias, optimizer, device)
+                    pred = pred[:,:-1,:]
+                    loss = custom_loss_function(pred[train_mask], labels[train_mask])
+                    loss.backward()
+                    optimizer.step()
 
-                pred_label = pred[train_mask].argmax(dim=-1, keepdim=True).flatten()
-                label_train = labels[train_mask]
-                acc = accuracy_score(label_train.cpu().numpy(), pred_label.cpu().numpy())
+                    pred_label = pred[train_mask].argmax(dim=-1, keepdim=True).flatten()
+                    label_train = labels[train_mask]
+                    acc = accuracy_score(label_train.cpu().numpy(), pred_label.cpu().numpy())
 
-                train_acc, valid_acc, test_acc, train_loss, valid_loss, test_loss, pred = evaluate(model, feat,
-                                                                                                   labels,
-                                                                                                   prepro_bias,
-                                                                                                   train_mask,
-                                                                                                   valid_mask,
-                                                                                                   test_mask, device)
+                    train_acc, valid_acc, test_acc, train_loss, valid_loss, test_loss, pred = evaluate(model, feat,
+                                                                                                    labels,
+                                                                                                    prepro_bias,
+                                                                                                    train_mask,
+                                                                                                    valid_mask,
+                                                                                                    test_mask, device)
 
-                end_time = time.time()
-                per_epoch_time.append(end_time - start_time)
-                total_time += end_time - start_time
-                # t.set_postfix(time=end_time - start_time, lr=optimizer.param_groups[0]['lr'])
+                    end_time = time.time()
+                    per_epoch_time.append(end_time - start_time)
+                    total_time += end_time - start_time
+                    t.set_postfix(time=end_time - start_time, lr=optimizer.param_groups[0]['lr'])
 
-                wandb.log({"epoch": epoch + 1, "train_loss": train_loss, "train_acc": train_acc, "test_acc": test_acc})
-                print(
-                    f"Average_epoch_time:{total_time / (epoch + 1):.2f} Loss:{loss:.4f} Acc:{acc:.4f} "
-                    f"Train_Loss:{train_loss:.4f} Val_Loss:{valid_loss:.4f} Test_Loss:{test_loss:.4f} "
-                    f"Train_Acc:{train_acc:.4f} Val_Acc:{valid_acc:.4f} Test_Acc:{test_acc:.4f}"
-                )
+                    wandb.log({"epoch": epoch + 1, "train_loss": train_loss, "train_acc": train_acc, "test_acc": test_acc})
+                    print(
+                        f"Average_epoch_time:{total_time / (epoch + 1):.2f} Loss:{loss:.4f} Acc:{acc:.4f} "
+                        f"Train_Loss:{train_loss:.4f} Val_Loss:{valid_loss:.4f} Test_Loss:{test_loss:.4f} "
+                        f"Train_Acc:{train_acc:.4f} Val_Acc:{valid_acc:.4f} Test_Acc:{test_acc:.4f}"
+                    )
 
-                if valid_acc > best_val_acc:
-                    best_val_acc = valid_acc
-                    final_test_acc = test_acc
-                    # final_pred = pred
+                    if valid_acc > best_val_acc:
+                        best_val_acc = valid_acc
+                        final_test_acc = test_acc
+                        # final_pred = pred
 
-                    # save checkpoint
-                    checkpoint_dir = os.path.join(root_checkpoint_dir, "RUN_")
-                    if not os.path.exists(checkpoint_dir):
-                        os.makedirs(checkpoint_dir)
-                    torch.save(model.state_dict(), "{}.pkl".format(checkpoint_dir + "/epoch_" + str(epoch)))
+                        # save checkpoint
+                        checkpoint_dir = os.path.join(root_checkpoint_dir, "RUN_")
+                        if not os.path.exists(checkpoint_dir):
+                            os.makedirs(checkpoint_dir)
+                        torch.save(model.state_dict(), "{}.pkl".format(checkpoint_dir + "/epoch_" + str(epoch)))
 
-                if test_acc > best_test_acc:
-                    best_test_acc = test_acc
-                    corresponding_valid_acc = valid_acc
+                    if test_acc > best_test_acc:
+                        best_test_acc = test_acc
+                        corresponding_valid_acc = valid_acc
 
-                for record, item in zip(
-                        [accs, train_accs, valid_accs, test_accs, losses, train_losses, valid_losses, test_losses],
-                        [acc, train_acc, valid_acc, test_acc, loss, train_loss, valid_loss, test_loss]
-                ):
-                    record.append(item)
+                    for record, item in zip(
+                            [accs, train_accs, valid_accs, test_accs, losses, train_losses, valid_losses, test_losses],
+                            [acc, train_acc, valid_acc, test_acc, loss, train_loss, valid_loss, test_loss]
+                    ):
+                        record.append(item)
 
-                writer.add_scalar('train_loss', train_loss, epoch)
-                writer.add_scalar('valid_loss', valid_loss, epoch)
-                writer.add_scalar('train_acc', train_acc, epoch)
-                writer.add_scalar('valid_acc', valid_acc, epoch)
-                writer.add_scalar('test_acc', test_acc, epoch)
-                writer.add_scalar('learning_rate', optimizer.param_groups[0]['lr'], epoch)
+                    writer.add_scalar('train_loss', train_loss, epoch)
+                    writer.add_scalar('valid_loss', valid_loss, epoch)
+                    writer.add_scalar('train_acc', train_acc, epoch)
+                    writer.add_scalar('valid_acc', valid_acc, epoch)
+                    writer.add_scalar('test_acc', test_acc, epoch)
+                    writer.add_scalar('learning_rate', optimizer.param_groups[0]['lr'], epoch)
 
-                # files = glob.glob(checkpoint_dir + '/*.pkl')
-                # for file in files:
-                #     epoch_nb = file.split('_')[-1]
-                #     epoch_nb = int(epoch_nb.split('.')[0])
-                #     if epoch_nb < epoch - 1:
-                #         os.remove(file)
+                    # files = glob.glob(checkpoint_dir + '/*.pkl')
+                    # for file in files:
+                    #     epoch_nb = file.split('_')[-1]
+                    #     epoch_nb = int(epoch_nb.split('.')[0])
+                    #     if epoch_nb < epoch - 1:
+                    #         os.remove(file)
 
-                scheduler.step(valid_loss)  # adjust learning rate
+                    scheduler.step(valid_loss)  # adjust learning rate
 
-                if optimizer.param_groups[0]['lr'] < params['min_lr']:
-                    print("\n!! LR SMALLER OR EQUAL TO MIN LR THRESHOLD.")
-                    break
+                    if optimizer.param_groups[0]['lr'] < params['min_lr']:
+                        print("\n!! LR SMALLER OR EQUAL TO MIN LR THRESHOLD.")
+                        break
 
-                # Stop training after params['max_time'] hours
-                # if time.time() - start0 > params['max_time'] * 3600:
-                #     print('-' * 89)
-                #     print("Max_time for training elapsed {:.2f} hours, so stopping".format(params['max_time']))
-                #     break
+                    # Stop training after params['max_time'] hours
+                    # if time.time() - start0 > params['max_time'] * 3600:
+                    #     print('-' * 89)
+                    #     print("Max_time for training elapsed {:.2f} hours, so stopping".format(params['max_time']))
+                    #     break
 
     except KeyboardInterrupt:
         print('-' * 89)
@@ -341,16 +342,20 @@ def main():
     if device.type == 'cuda':
         torch.cuda.manual_seed(params['seed'])
 
-    dataset = LoadData(DATASET_NAME, graph_file_num=1)
+    dataset = LoadData(DATASET_NAME, 1, data_params)
     # net_params["origin_dim"] = dataset.feat_dim
     # net_params["in_dim"] = net_params["hidden_dim"] lxl
     data_params["num_classes"] = dataset.num_classes
     data_params["spatial_pos_max"] = dataset.spatial_pos_max
+    data_params["num_spatial"] = data_params["spatial_pos_max"]*2
     data_params["num_in_degree"] = dataset.num_in_degree
     data_params["num_out_degree"] = dataset.num_out_degree
-    data_params['num_atoms'] = dataset.num_atoms  #节点数量
-    data_params['num_edges'] = 512*3  #暂时不知道干嘛的
-    data_params['max_nodes'] = 3000  #最多支持节点的数量
+    data_params['max_nodes'] = dataset.num_atoms  #实际节点数量
+    data_params['num_atoms'] = dataset.num_atoms  #最多支持多少节点
+    data_params['num_edges'] = dataset.num_edges  #支持的最多的边数量，设为跟实际有的边一样
+    data_params['multi_hop_max_dist'] = dataset.multi_hop_max_dist
+    data_params['num_edge_dis'] = dataset.multi_hop_max_dist
+    
     
     net_params['total_param'] = view_model_param(MODEL_NAME, net_params, data_params)
 
@@ -373,5 +378,5 @@ def main():
 if __name__ == '__main__':
     main()
     # from torch_geometric.datasets import Planetoid
-    # dataset = Planetoid(root='data/dataset_de/cora', name='cora')
+    # dataset = Planetoid(root='data/dataset_de/', name='cora')
 

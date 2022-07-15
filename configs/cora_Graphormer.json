@@ -11,7 +11,7 @@
 
   "params": {
     "seed": 41,
-    "epochs": 100,
+    "epochs": 200,
     "batch_size": 32,
     "init_lr": 0.05,
     "lr_reduce_factor": 0.5,
@@ -26,7 +26,7 @@
     "dropout": 0.1,
     "attention_dropout": 0.1,
     "act_dropout": 0.0,
-    "encoder_ffn_embed_dim": 256,
+    "encoder_ffn_embed_dim": 128,
     "encoder_layers": 6,
     "encoder_attention_heads": 8,
     "encoder_embed_dim": 128,
@@ -49,13 +49,15 @@
     "num_in_degree": -1,
     "num_out_degree": -1,
     "num_spatial": 512,
-    "num_edge_dis": 128,
+    "num_edge_dis": 128, 
     "multi_hop_max_dist": 5,
-    "spatial_pos_max": 1024,
-    "edge_type": "",
+    "spatial_pos_max": 20,
+    "edge_type": "multi_hop111",
     "pretrained_model_name": "none",
     "load_pretrained_model_output_layer": false,
     "train_epoch_shuffle": false,
     "user_data_dir": ""
   }
 }
+
+
