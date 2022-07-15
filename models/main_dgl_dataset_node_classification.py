@@ -168,7 +168,7 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, data_params, dir
                 for _,batch_data in enumerate(dataloader):
                     t.set_description('Epoch %d' % epoch)
                     batch_data_cuda = [item.to(device) for item in batch_data]
-                    feat, labels, valid_mask, test_mask, train_mask, \
+                    feat, labels, train_mask, test_mask, valid_mask, \
                     attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type, edge_input = batch_data_cuda
                     start_time = time.time()
                     prepro_bias = (attn_bias, spatial_pos, in_degree, out_degree, attn_edge_type, edge_input)
